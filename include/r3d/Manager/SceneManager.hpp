@@ -1,5 +1,5 @@
-#ifndef __MANAGER_SCENE_MANAGER_HPP_
-#define __MANAGER_SCENE_MANAGER_HPP_
+#ifndef __R3D_MANAGER_SCENE_MANAGER_HPP_
+#define __R3D_MANAGER_SCENE_MANAGER_HPP_
 
 #include <stdexcept>
 #include <memory>
@@ -27,17 +27,19 @@ namespace r3d
 	{
 	public:
 		SceneManager(Engine *engine);
-		void drawAll();
+
 		//!> load Obj scene and necessary texture and buffer
 		//   and put it under SceneNode
 		SceneNode *loadObjScene(SceneNodePtr, const char *filename, const char *base=nullptr);
-		SceneNodePtr addMeshSceneNode();
-		SceneNodePtr addEmptySceneNode();
+		SceneNode *addMeshSceneNode(SceneNodePtr);
+		SceneNode *addEmptySceneNode(SceneNodePtr);
+		SceneNode *addLightSceneNode(SceneNodePtr, Light *);
 
 		void addLight(Light *light)
 		{ lights.push_back(light); }
 
 		void setMainCamera(CameraPtr cam){ m_camera=cam; }
+		Camera *getMainCamera() const {return m_camera.get();}
 
 		SceneNodePtr getRootNode() const { return m_rootNode; }
 		std::vector<Light *> &getLights() { return lights; }

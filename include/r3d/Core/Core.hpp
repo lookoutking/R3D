@@ -1,5 +1,5 @@
-#ifndef __CORE_CORE_HPP_
-#define __CORE_CORE_HPP_
+#ifndef __R3D_CORE_CORE_HPP_
+#define __R3D_CORE_CORE_HPP_
 
 #include <GL/glew.h>
 #include <memory>
@@ -35,7 +35,7 @@ namespace r3d
 	{
 		RA_OPENGL_2_1,
 		RA_OPENGL_3_3,
-		RA_SOFTWARE
+		RA_OPENGL_4_3,
 	};
 
 	class Renderer;

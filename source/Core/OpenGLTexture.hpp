@@ -1,5 +1,5 @@
-#ifndef __CORE_OPENGL_TEXTURE_HPP
-#define __CORE_OPENGL_TEXTURE_HPP
+#ifndef __R3D_CORE_OPENGL_TEXTURE_HPP
+#define __R3D_CORE_OPENGL_TEXTURE_HPP
 
 #include <r3d/Core/Texture.hpp>
 #include "OpenGLObject.hpp"
@@ -15,6 +15,7 @@ namespace r3d
 
 		// ITexture
 		virtual void bind(uint32_t channel);
+		virtual void bindImage(uint32_t channel, int level, AccessLevel);
 		virtual void unbind();
 		virtual void *lock();
 		virtual void unlock();
@@ -22,14 +23,20 @@ namespace r3d
 		//ColorTexture
 		virtual void setWrapping(Wrapping s, Wrapping t);
 		virtual void setFilter(Filter min, Filter mag);
+		virtual void generateMipmap();
 
-		void generateMipmap();
+		//Set Border
+		virtual void setBorder(const glm::vec4 border) ;
 
 		// must update gpu
 		virtual void resize(uint32_t width, uint32_t height);
 	private:
+		GLenum m_internalFormat;
 		GLenum getGLInternelFormat() const;
 		void resetGLTexture() const;
+		void generatePBO();
+		GLuint m_pbo;
+		void *m_lockedPtr;
 	};
 
 	class OpenGLDepthTexture2D: public DepthTexture2D, public OpenGLObject
@@ -39,6 +46,7 @@ namespace r3d
 
 		// ITexture
 		virtual void bind(uint32_t channel);
+		virtual void bindImage(uint32_t channel, int level, AccessLevel);
 		virtual void unbind();
 		virtual void *lock();
 		virtual void unlock();
@@ -46,7 +54,11 @@ namespace r3d
 		//ColorTexture
 		virtual void setWrapping(Wrapping s, Wrapping t);
 		virtual void setFilter(Filter min, Filter mag);
+		virtual void generateMipmap();
 
+		//Set Border
+		virtual void setBorder(const glm::vec4 border) ;
+		
 		// must update gpu
 		virtual void resize(uint32_t width, uint32_t height);
 	private:

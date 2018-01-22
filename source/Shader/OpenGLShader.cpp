@@ -12,6 +12,10 @@ namespace r3d
 				m_id=glCreateShader(GL_VERTEX_SHADER); break;
 			case ST_FRAGMENT_SHADER:
 				m_id=glCreateShader(GL_FRAGMENT_SHADER); break;
+			case ST_GEOMETRY_SHADER:
+				m_id=glCreateShader(GL_GEOMETRY_SHADER); break;
+			case ST_COMPUTE_SHADER:
+				m_id=glCreateShader(GL_COMPUTE_SHADER); break;
 		}
 	}
 

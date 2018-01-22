@@ -1,5 +1,5 @@
-#ifndef __CORE_RENDERTARGET_HPP_
-#define __CORE_RENDERTARGET_HPP_
+#ifndef __R3D_CORE_RENDERTARGET_HPP_
+#define __R3D_CORE_RENDERTARGET_HPP_
 
 #include <vector>
 #include <cstdint>
@@ -15,6 +15,8 @@ namespace r3d
 		virtual ~RenderTarget2D(){}
 		virtual void attachColorTextures(uint32_t n, ColorTexture2D **)=0;
 		virtual void attachDepthTexture(DepthTexture2D *)=0;
+		ColorTexture2D *getColorTexture(uint32_t index)
+		{ return m_colorTextures.at(index); }
 
 		virtual void bind()=0;
 		virtual void unbind()=0;

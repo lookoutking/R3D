@@ -21,8 +21,8 @@
 
 #pragma once
 
-#ifndef __UTILS_IMAGE_HPP
-#define __UTILS_IMAGE_HPP
+#ifndef __R3D_UTILS_IMAGE_HPP
+#define __R3D_UTILS_IMAGE_HPP
 
 #include <r3d/Utils/Color.hpp>
 #include <r3d/Utils/ByteBuffer.hpp>
@@ -81,6 +81,9 @@ namespace r3d
 		void Load( const std::string& filename );
 		void Save( const std::string& filename, ImageFileFormat::image_file_format_t format );
 
+		bool HasAlpha() const { return hasAlpha; }
+		bool IsGrayScale() const { return isGrayscale; }
+
 		uint16_t GetWidth() const;
 		uint16_t GetHeight() const;
 		const Color* GetPixels() const;
@@ -91,6 +94,8 @@ namespace r3d
 	private:
 		Color* image;
 		uint16_t width, height;
+		bool hasAlpha;
+		bool isGrayscale;
 
 		Image( const Image& );
 		const Image& operator=( const Image& );

@@ -6,45 +6,21 @@
 #include <Rocket/Core.h>
 #include <Rocket/Debugger.h>
 #include <Rocket/Controls.h>
-
 //LUA
 #include <Rocket/Core/Lua/Interpreter.h>
 #include <Rocket/Controls/Lua/Controls.h>
 #include "r3drocket.h"
 #include "LuaInterface.h"
+#include "SceneNodeList.h"
 
-static const char *vertex_shader=
-	"#version 330\n"
-	"layout(location=0) in vec3 pos;\n"
-	"void main(){\n"
-	"gl_Position=vec4(pos, 1.0);"
-	"}\n";
- 
-static const char *fragment_shader=
-	"#version 330\n"
-	"uniform sampler2D posMap;\n"
-	"uniform sampler2D diffuseMap;\n"
-	"uniform sampler2D normMap;\n"
-	"uniform vec2 viewport;"
-	"uniform vec3 eyePos;"
-	"uniform vec3 lightPos=vec3(0, 30, 0);\n"
-	"uniform vec3 lightColor=vec3(0.8)\n;"
-	"out vec4 color;\n"
-	"void main(){\n"
-	"vec2 vTexCoord=gl_FragCoord.xy/viewport;"
-	"vec3 pos=texture(posMap, vTexCoord).xyz;\n"
-	"vec3 fColor=texture(diffuseMap, vTexCoord).rgb;\n"
-	"vec3 norm=texture(normMap, vTexCoord).xyz;"
-	"if(length(norm)<=0.5) { color=vec4(0.0); return; }"
-	"vec3 lightVec=normalize(lightPos-pos);"
-	"float diffuse=dot(norm, lightVec);\n"
-	"if(diffuse>=0.0){"
-	"float specular = pow(max(dot(reflect(-lightVec, norm), normalize(eyePos-pos)), 0), 30);\n"
-	"color=vec4(diffuse*fColor*lightColor+lightColor*specular, 1);} else{color=vec4(0.0f);}\n"
-	"}\n";
 
 static R3DRocket::SystemInterface *si;
 static R3DRocket::RenderInterface *ri;
+
+static r3d::Camera *global_fps;
+static r3d::VertexArray *vao;
+r3d::Deferred *deferred_pipeline;
+extern SceneNodeList *datasource;
 
 class MyEventListener: public r3d::EventListener
 {
@@ -53,15 +29,63 @@ public:
 		m_context(context_), cw(cw_)
 	{
 		FPSMode=false;
+		node=nullptr;
 	}
 	virtual void OnMouseButtonStateChange(int button, int action, int mods)
 	{
-		switch(action)
+		double posx, posy;
+		cw->getMouse()->getPos(&posx, &posy);
+		if(!FPSMode)
 		{
-			case 1:
-			m_context->ProcessMouseButtonDown(button, 0); break;
-			case 0:
-			m_context->ProcessMouseButtonUp(button, 0); break;
+			switch(action)
+			{
+				case 1:
+				m_context->ProcessMouseButtonDown(button, 0); break;
+				case 0:
+				m_context->ProcessMouseButtonUp(button, 0); break;
+			}
+			if(action==1&&button==1)
+			{
+				if(node&&node->getMaterial())
+					node->getMaterial()->enableWireframeView(false);
+				node=deferred_pipeline->getObject(posx, posy);
+				if(node)
+				{
+					fprintf(stderr, "%s\n", node->getName());
+					node->getMaterial()->enableWireframeView(true);
+					LuaInterface::SetSelectObject(node);
+				}
+			}
+		}else
+		{
+			if(button==1&&action){//Mouse click right 
+				auto sMgr=cw->getSceneManager();
+				
+				r3d::PointLight *light=new r3d::PointLight();
+				light->pos=glm::vec3(0.0f);
+				light->color=(glm::vec3(0.3f)+
+				24.0f*glm::vec3((float)rand()/RAND_MAX, (float)rand()/RAND_MAX, (float)rand()/RAND_MAX));
+				auto node=sMgr->addLightSceneNode(sMgr->getRootNode(), light);
+				node->getTransformation()->setTranslation(global_fps->getPos());
+				datasource->notify(sMgr->getRootNode().get());
+			}
+
+			if(button==2&&action){//Mouse click middle
+				auto sMgr=cw->getSceneManager();
+				
+				r3d::SpotLight *light=new r3d::SpotLight(cw, 1024, 1024);
+				light->dir = global_fps->getDir();
+				light->up = global_fps->getUp();
+				light->innerAngle = 20;
+				light->outerAngle = 30;
+
+				light->pos=glm::vec3(0.0f);
+				light->color=(glm::vec3(0.3f)+
+				80.0f*glm::vec3((float)rand()/RAND_MAX, (float)rand()/RAND_MAX, (float)rand()/RAND_MAX));
+				auto node=sMgr->addLightSceneNode(sMgr->getRootNode(), light);
+				node->getTransformation()->setTranslation(global_fps->getPos());
+				datasource->notify(sMgr->getRootNode().get());
+			}
 		}
 
 	}
@@ -96,11 +120,17 @@ public:
 				keyMap=Rocket::Core::Input::KI_UP; break;
 			case r3d::KC_DOWN:
 				keyMap=Rocket::Core::Input::KI_DOWN; break;
+			case r3d::KC_P:
+				break;
 			case r3d::KC_F1:
 				if(action)
 					FPSMode=!FPSMode;
 				cw->getMouse()->setPos(cw->getWidth()/2, cw->getHeight()/2);
 				return;
+			case r3d::KC_F2:
+				if(action)
+					deferred_pipeline->enableSSAO(!deferred_pipeline->isEnableSSAO());
+				break;
 			default:
 				return;
 		}
@@ -112,7 +142,7 @@ public:
 				m_context->ProcessKeyUp(keyMap, 0);
 		}
 	}
-
+	std::list<r3d::PointLight> ps;
 	virtual void OnFilesDropIn(uint32_t count, const char *filenames[])
 	{
 		/*
@@ -124,79 +154,12 @@ public:
 	}
 	
 	bool FPSMode;
+
 private:
 	Rocket::Core::Context *m_context;
+	r3d::SceneNode *node;
 	r3d::ContextWindow *cw;
 };
-
-class RocketEventListener: public Rocket::Core::EventListener
-{
-public:
-	RocketEventListener(r3d::Engine *engine_): engine(engine_){}
-	virtual void ProcessEvent(Rocket::Core::Event& event)
-	{
-		auto sMgr=engine->getSceneManager();
-		auto var=event.GetCurrentElement()->GetElementById("fn")->GetAttribute("value");
-		float zoom=event.GetCurrentElement()->GetElementById("zoom")->GetAttribute("value")->Get<float>();
-		auto node=sMgr->loadObjScene(sMgr->getRootNode(), var->Get<Rocket::Core::String>().CString());
-		node->getTransformation()->setScale({zoom, zoom, zoom});
-	}
-private:
-	r3d::Engine *engine;
-};
-
-static r3d::ProgramPtr MakeShaderProgram(const r3d::Engine *engine, const char *vsource,
-	const char *fsource)
-{
-	auto program=engine->newProgram();
-	auto vs=engine->newShader(r3d::ST_VERTEX_SHADER);
-	auto fs=engine->newShader(r3d::ST_FRAGMENT_SHADER);
-	vs->source(vsource);
-	fs->source(fsource);
-	vs->compile();
-	fs->compile();
-	program->attachShader(vs);
-	program->attachShader(fs);
-	program->link();
- 
-	return program;
-}
-
-static r3d::VertexArray *MakeQuad(r3d::Engine *engine)
-{
-	std::vector<glm::vec3> vertices=
-	{glm::vec3(-1, -1, 0),glm::vec3(1, -1, 0),glm::vec3(1, 1, 0),glm::vec3(-1, 1, 0)};
- 
- 	auto bMgr=engine->getBufferManager();
- 	auto aMgr=engine->getVertexArrayManager();
-
-	auto vbo=bMgr->registerVertexBuffer("QUAD", &vertices[0], vertices.size()*3*sizeof(float), r3d::BU_STATIC_DRAW);
-	auto ibo=bMgr->registerIndexBuffer("QUAD", {0, 1, 2, 0, 2, 3}, r3d::BU_STATIC_DRAW);
-
-	auto vao=aMgr->registerVertexArray("QUAD");
-	vao->bindVertexBuffer(vbo);
-	vao->bindIndexBuffer(ibo);
-
-	r3d::AttribPointer vertAtt(r3d::RT_FLOAT, 3, 0, 0);
-	vao->enableAttribArray(0, vertAtt);
-	return vao;
-}
-
-static void BeginLightPass(r3d::Renderer *renderer, r3d::ContextWindow *cw, r3d::ProgramPtr &program, std::shared_ptr<r3d::GBuffer> &gBuffer)
-{
-	program->use();
-	gBuffer->getPositionMap()->bind(0);
-	program->setUniform("posMap", 0);
-	gBuffer->getDiffuseMap()->bind(1);
-	program->setUniform("diffuseMap", 1);
-	gBuffer->getNormalMap()->bind(2);
-	program->setUniform("normMap", 2);
-	program->setUniform("viewport", glm::vec2(cw->getWidth(), cw->getHeight()));
-
-	renderer->enableBlending(true, r3d::BP_ONE, r3d::BP_ONE, r3d::BF_ADD);
-	renderer->enableDepthTest(false);
-	renderer->clear();
-}
 
 static Rocket::Core::Context *SetupRocket(r3d::Engine *engine)
 {
@@ -221,6 +184,8 @@ static Rocket::Core::Context *SetupRocket(r3d::Engine *engine)
 	Rocket::Debugger::Initialise(context);
 	Rocket::Debugger::SetVisible(true);
 
+	LuaInterface::Initialise(engine, deferred_pipeline);
+
 	Rocket::Core::Lua::Interpreter::LoadFile("assets/start.lua");
 
 	return context;
@@ -228,7 +193,7 @@ static Rocket::Core::Context *SetupRocket(r3d::Engine *engine)
 
 int main(int argc, char *argv[])
 {
-	r3d::Engine *engine = new r3d::Engine(r3d::RA_OPENGL_3_3);
+	r3d::Engine *engine = new r3d::Engine(r3d::RA_OPENGL_4_3);
 
 
 	int width=1440, height=900;
@@ -239,35 +204,19 @@ int main(int argc, char *argv[])
 	}
 	auto cw=engine->newContextWindow(width, height, "R3D Engine v0.1");
 
-	auto sMgr=engine->getSceneManager();
 	std::shared_ptr<r3d::Camera> fps(new r3d::FPSCamera(cw, 45.0f, glm::vec3(5.0f, 0.0f, 0.0f)));
-	sMgr->setMainCamera(fps);
+	cw->getSceneManager()->setMainCamera(fps);
+	global_fps=fps.get();
 
-	std::shared_ptr<r3d::GBuffer> gBuffer(new r3d::GBuffer(engine, cw->getWidth(), cw->getHeight()));
-
-	// render to texture
-	auto program = MakeShaderProgram(engine, vertex_shader, fragment_shader);
-	auto vao=MakeQuad(engine);	
-
-	// enable backface culling..
-	//engine->getRenderer()->enableBackfaceCulling(true);
-
-	r3d::PointLight p, p2;
-	p2.pos=glm::vec3(10);
-	p2.color=glm::vec3(2.0f, 2.0f, 2.0f);
-	p.pos=glm::vec3(0, 30, 0);
-	p.color=glm::vec3(1.0f, 1.0f, 1.0f);
-	sMgr->addLight(&p);
-	sMgr->addLight(&p2);
+	deferred_pipeline = new r3d::Deferred(engine, cw);
 
 	Rocket::Core::Context *context=SetupRocket(engine);
 	MyEventListener myel(context, cw);
 	cw->setEventListener(&myel);
-	RocketEventListener myrel(engine);
-	LuaInterface::Initialise(engine);
 
 	cw->getMouse()->setPos(cw->getWidth()/2, cw->getHeight()/2);
 	fps->update(engine->getTime());
+
 	while(!cw->isCloseButtonClicked())
 	{
 		if(myel.FPSMode)
@@ -278,32 +227,15 @@ int main(int argc, char *argv[])
 			cw->getMouse()->getPos(&posx, &posy);
 			context->ProcessMouseMove((int)posx, (int)posy, 0);
 		}
-		
-		//Update GBuffer
-		gBuffer->beginScene();
-		sMgr->drawAll();
-		gBuffer->endScene();
 
-		BeginLightPass(engine->getRenderer(), cw, program, gBuffer);
+		engine->getRenderer()->clear();
 
-		p.pos.x=10*cos(2*3.1415f/4*engine->getTime());
-		p.pos.z=10*sin(2*3.1415f/4*engine->getTime());
+		deferred_pipeline->run();
 
-		// setup post-processing lighting shader parameter
-		program->setUniform("eyePos", fps->getPos());
-
-		for(auto light: sMgr->getLights())
-		{
-			// First light
-			program->setUniform("lightPos", light->pos);
-			program->setUniform("lightColor", light->color);
-			engine->getRenderer()->drawElements(program.get(), vao, r3d::PT_TRIANGLES, 6);
-		}
 		engine->getRenderer()->enableBlending(true, r3d::BP_SRC_ALPHA, r3d::BP_ONE_MINUS_SRC_ALPHA, r3d::BF_ADD);
+		context->Update();
 		context->Render();
 
-		engine->getRenderer()->enableBlending(false);
-		
 		cw->pollInput();
 		cw->swapBuffers();
 	}

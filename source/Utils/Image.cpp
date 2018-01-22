@@ -48,6 +48,8 @@ namespace r3d
 
 		this->width = width;
 		this->height = height;
+		hasAlpha=true;
+		isGrayscale=false;
 	}
 
 	Image::Image( uint16_t width, uint16_t height, uint8_t* pixels )
@@ -66,11 +68,15 @@ namespace r3d
 
 		this->width = width;
 		this->height = height;
+		hasAlpha=true;
+		isGrayscale=false;
 	}
 
 	Image::Image( const std::string& filename )
 	{
 		image = 0;
+		hasAlpha=true;
+		isGrayscale=false;
 		Load( filename );
 	}
 
@@ -251,17 +257,24 @@ namespace r3d
 		data.Advance( 1 ); // Image ID field length, ignored
 		if ( data.ReadUbyte() != 0 ) throw FormatException(); // Color map
 		uint8_t type = data.ReadUbyte();
-		if ( type != 2 && type != 10 ) throw FormatException(); // Image type not true-color
+		if ( type != 2 && type!=3 && type != 10 ) throw FormatException(); // Image type not true-color or gray-scale
 		data.Advance( 5 ); // Color map info, ignored
 		data.Advance( 4 ); // XY offset, ignored
 		uint16_t width = data.ReadUshort();
 		uint16_t height = data.ReadUshort();
 		uint8_t depth = data.ReadUbyte();
-		if ( depth != 24 && depth != 32 ) throw FormatException(); // Not RGB(A)
+		if ( depth!=8 && depth != 24 && depth != 32 ) throw FormatException(); // Not R(GB)(A)
 		uint8_t bytesPerPixel = depth / 8;
 		uint8_t descriptor = data.ReadUbyte();
 		if ( depth == 24 && descriptor != 0 ) throw FormatException(); // Check for alpha channel if bit depth is 32
-
+		if ( depth == 32 ) hasAlpha = true; else hasAlpha=false; // check alpha channel?
+		if ( depth == 8 ) 
+		{
+			if ( bytesPerPixel == 1 )
+				isGrayscale=true;
+			else
+				throw FormatException(); // only support 8 bit grayscale
+		}
 		// If pixels are RLE encoded, they need to be unpacked first
 		if ( type == 10 )
 			DecodeRLE( data, width * height * bytesPerPixel, bytesPerPixel );
@@ -273,11 +286,20 @@ namespace r3d
 		{
 			for ( uint16_t x = 0; x < width; x++ )
 			{
-				if ( bytesPerPixel == 3 )
-					image[ x + y * width ] = Color( data.PeekByte( 2 ), data.PeekByte( 1 ), data.PeekByte( 0 ) ); // BGR byte order
-				else
-					image[ x + y * width ] = Color( data.PeekByte( 2 ), data.PeekByte( 1 ), data.PeekByte( 0 ), data.PeekByte( 3 ) ); // BGRA byte order
-
+				switch(bytesPerPixel)
+				{
+					case 1:
+						image[ x + y * width ] = Color( data.PeekByte( 0 ), data.PeekByte( 0 ), data.PeekByte( 0 ) );
+						break;
+					case 3:
+						// BGR byte order
+						image[ x + y * width ] = Color( data.PeekByte( 2 ), data.PeekByte( 1 ), data.PeekByte( 0 ) );
+						break;
+					case 4:
+						// BGRA byte order
+						image[ x + y * width ] = Color( data.PeekByte( 2 ), data.PeekByte( 1 ), data.PeekByte( 0 ), data.PeekByte( 3 ) );
+						break;
+				}
 				data.Advance( bytesPerPixel );
 			}
 		}
@@ -566,6 +588,9 @@ namespace r3d
 			else if ( info->color_type == PNG_COLOR_TYPE_RGBA )
 				for ( uint16_t x = 0; x < info->width; x++ )
 					image[ x + y * info->width ] = Color( row[x*4+0], row[x*4+1], row[x*4+2], row[x*4+3] );
+			else if( info->color_type == PNG_COLOR_TYPE_GRAY)
+				for ( uint16_t x = 0; x < info->width; x++ )
+					image[ x + y * info->width ] = Color( row[x], row[x], row[x] );
 			else
 				throw FormatException();
 		}

@@ -1,5 +1,5 @@
-#ifndef __UTILS_GBUFFER_HPP_
-#define __UTILS_GBUFFER_HPP_
+#ifndef __R3D_PIPELINE_GBUFFER_HPP_
+#define __R3D_PIPELINE_GBUFFER_HPP_
 
 #include <memory>
 
@@ -23,12 +23,17 @@ namespace r3d
 		ColorTexture2D *getPositionMap() { return m_posMap; }
 		ColorTexture2D *getDiffuseMap() { return m_diffuseMap; }
 		ColorTexture2D *getNormalMap() { return m_normMap; }
+		ColorTexture2D *getSpecularMap() { return m_specMap; }
+		ColorTexture2D *getObjectMap() { return m_objMap; }
+		DepthTexture2D *getDepthMap() { return m_depthMap; }
 	private:
 		Engine *m_engine;
 
 		RenderTarget2DPtr m_fbo;
 
-		ColorTexture2D *m_posMap, *m_diffuseMap, *m_normMap;
+		ColorTexture2D *m_posMap, *m_diffuseMap, *m_normMap, *m_specMap;
+
+		ColorTexture2D *m_objMap;
 
 		DepthTexture2D *m_depthMap;
 
